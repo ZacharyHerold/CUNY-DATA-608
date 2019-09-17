@@ -1,0 +1,223 @@
+---
+title: "CUNY DATA 608: HW #1"
+author: "Zachary Herold"
+date: "Sept. 15, 2019"
+output:
+  html_document:  
+    theme: lumen
+---
+
+## Principles of Data Visualization and Introduction to ggplot2**
+
+I have provided you with data about the 5,000 fastest growing companies in the US, as compiled by Inc. magazine. lets read this in:
+
+```{r, include=F}
+library(ggplot2)
+library(dplyr)
+```
+
+### Loading the csv file and preserving only records with no missing values  
+
+```{r}
+inc <- read.csv("https://raw.githubusercontent.com/ZacharyHerold/CUNY-DATA-608/master/inc5000_data.csv", header= TRUE)
+inc <- inc[complete.cases(inc),]
+```
+
+And lets preview this data:
+
+```{r}
+head(inc)
+```
+```{r}
+summary(inc)
+```
+
+###Observations:
+We observe the minimum qualifying revenue for inclusion is $2 million.
+
+The quantitative data (Growth_rate, Revenue, Employees) have maximum values far beyond the 3rd quartile values, reflecting a heavy rightward skew due to outliers. Indeed, the mean is beyond the 3rd quartile values for each of the three variables. In the case of Growth_Rate, this is likely because a low starting base, while for Revenue and Employees, this is from the inclusion of companies of scale beyond the norm. 
+
+From the data it is unclear if the Growth_Rate is expressed as a percentage or decimal. We would assume that these are decimals with a minimum Growth_Rate of 34% since the dataset is looking at fast-growing companies. For growth rate to have meaning, there should be a minimum number of years for the company to be in operation, since year-on-year growth will be inflated when the base revenue of the year prior is very low, something expected in the initial years of operation. 
+
+To better show the revenue amounts, we convert the values into million dollars. 
+
+```{r}
+inc$Revenue <- inc$Revenue  / 1000000
+order.Rev <- order(inc$Revenue)
+tail(inc[order.Rev, ],6)
+```
+
+From the scatterplot below, we see two distinct company types clusted around the axes: large companies with relative low growth and small companies with extremely high growth.  
+
+```{r}
+inc <- subset(inc, Revenue < 5000) #removing CDW (Computer Hardware) due to its incomparable scale
+ggplot(inc, aes(x = Growth_Rate, y = Revenue)) + geom_point(shape = 21)
+```
+
+```{r}
+order.Growth <- order(inc$Growth_Rate)
+tail(inc[order.Growth, ],6)
+```
+
+The energy company Bridger stands out above the rest as one that has extremely brisk growth along with $1.9 billion in revenue. 
+
+Despite the observation of the two classes of companies, there is not a negative correlation between Growth_Rate and Revenue as would be expected. 
+
+```{r}
+cor(inc$Growth_Rate, inc$Revenue)
+```
+
+The lack of strong relationship between Revenue and Growth_Rate is further reflected in the high p-value of the linear regression. 
+
+```{r}
+mod <- lm(Growth_Rate ~ Revenue, inc)
+summary(mod)
+```
+
+
+## Question 1
+
+Create a graph that shows the distribution of companies in the dataset by State (ie how many are in each state). There are a lot of States, so consider which axis you should use. This visualization is ultimately going to be consumed on a 'portrait' oriented screen (ie taller than wide), which should further guide your layout choices.
+
+
+```{r}
+count.State <- data.frame(table(inc$State))
+head(count.State)
+```  
+
+### Fast-growing Companies by State
+
+```{r}
+ggplot(count.State, aes(x = reorder(Var1, Freq), y = Freq)) + 
+  geom_bar(stat = "identity", fill = "#f68060", alpha =.6, colour = "black") +
+  coord_flip() +
+  theme_bw(base_size = 8) +
+  xlab("State") + 
+  ylab("No. of Inc. Magazine Fast-Growing Companies") 
+```
+
+As expected, States with the largest populations have the most fast-growing companies. There are some discrepancies however. For example, comparing these figures to national population statistics, we note that Pennslyvania is ranked 5th in population, but only 10th here, while Massachusetts is 15th in population but 9th here. Surprisingly, Delaware is not ranked higher due to its favorable incorporation laws, suggesting that the state refers to location of headquarters, rather than place of incorporation. 
+
+
+## Question 2
+
+Lets dig in on the state with the 3rd most companies in the data set. Imagine you work for the state and are interested in how many people are employed by companies in different industries. Create a plot that shows the average and/or median employment by industry for companies in this state (only use cases with full data, use R's `complete.cases()` function.) In addition to this, your graph should show how variable the ranges are, and you should deal with outliers.
+
+Here we have reduced the dataset to only New York-based companies. 
+
+```{r}
+order.Freq <- order(count.State$Freq, decreasing = TRUE)
+sort.State <- count.State[order.Freq, ]
+state3 <- as.character(sort.State[3,1])
+inc.sub <- subset(inc, inc$State == state3)
+inc.sub <- inc.sub[complete.cases(inc.sub),]
+head(inc.sub)
+```
+
+There are 311 NY companies represented in the dataset.
+
+```{r}
+nrow(inc.sub)
+```
+
+```{r}
+state3.Industry <- data.frame(table(inc.sub$Industry)) # grouping NY companies by industry
+state3.Employees <- aggregate(Employees ~ Industry, inc.sub, median) # taking the median number of employees by industry in NY
+```
+
+### Median number of corporate employees by industry (in New York)
+(The sample size is marked within the bar)
+
+```{r}
+ggplot(state3.Employees, aes(x = reorder(Industry, Employees), y = Employees)) + 
+  geom_bar(stat = "identity", fill = "#f68060", alpha =.6, colour = "black") +
+  geom_text(aes(label = state3.Industry$Freq), hjust = 1) +
+  coord_flip() +
+  theme_bw(base_size = 8) +
+  xlab("Industry") + 
+  ylab("Median Employees by NY Company (with no. of companies)") 
+```
+
+### Plotting the range of employees by Industry in NY
+
+We note that two companies have in excess of 10,000 employees, clearly outliers. 
+
+```{r}
+head(inc.sub[order(-inc.sub$Employees),], 6)
+```
+
+We first define outliers that those cases with values more than 1.5 times higher or lower than the interquartile range. When we do so, we are left with 253 companies, with 58 classified as "outliers" according to this definition. 
+
+```{r}
+outlier_limit <- median(inc.sub$Employees) + 1.5 * (fivenum(inc.sub$Employees)[4] - fivenum(inc.sub$Employees)[2]) 
+inc.sub2 <- subset(inc.sub, Employees < outlier_limit)
+nrow(inc.sub2)
+```
+
+The IQR definition yields too many outliers, so we redefine it as companies with over 350 employees, thereby removing on 25 companies, or about 8%. 
+
+```{r}
+outlier_limit2 <- 350 
+inc.sub2 <- subset(inc.sub, Employees < outlier_limit2)
+nrow(inc.sub2)
+```
+
+Creating boxplots, we observe the ranges of employees by segment. IT services seem to have the widest spread. 
+
+```{r}
+ggplot(inc.sub2, aes(x = reorder(Industry, Employees), y = Employees)) + 
+  geom_boxplot() +
+  coord_flip() +
+  theme_bw(base_size = 8) +
+  xlab("Industry") + 
+  ylab("Range of Staff Size (excluding outliers)") 
+```
+
+## Question 3
+
+Now imagine you work for an investor and want to see which industries generate the most revenue per employee. Create a chart that makes this information clear. Once again, the distribution per industry should be shown.
+
+
+We note that Computer Hardware was the highest revenue per employee (even after CDW was excised from the dataset) with over $600,000 per worker. Energy ranks second and construction third. Somewhat ironically, Human Resources is the least value-generating for labor. 
+
+```{r}
+grp <- group_by(inc, Industry)
+ind.rev <- summarise(grp, rev.per.employee=sum(Revenue)/sum(Employees))
+
+order.Freq <- order(ind.rev$rev.per.employee, decreasing = TRUE)
+sort.rev <- ind.rev[order.Freq, ]
+head(sort.rev)
+```
+
+### Revenue per Employee, Industry-wide, by Industry Categories
+
+```{r}
+ggplot(sort.rev, aes(x = reorder(Industry, rev.per.employee), y = rev.per.employee * 1000)) + 
+  geom_bar(stat = "identity", fill = "#f68060", alpha =.6, colour = "black") +
+  coord_flip() +
+  theme_bw(base_size = 8) +
+  xlab("Industry") + 
+  ylab("Industry Revenue per Employee (in $000)") 
+```
+
+At the individual company level, we note the range of Revenue per Employee using a boxplot. This is after first removing outliers based on IQR (occuring especially at energy companies)
+
+```{r}
+#Removing outliers based on IQR * 1.5
+inc$rev.employee <- inc$Revenue / inc$Employees
+outlier_limit2 <- median(inc$rev.employee) + 1.5 * (fivenum(inc$rev.employee)[4] - fivenum(inc$rev.employee)[2]) 
+inc.sub3 <- subset(inc, inc$rev.employee < outlier_limit2)
+```
+
+### Range of Employee Revenue Generation (at Individual Companies)
+
+```{r}
+ggplot(inc.sub3, aes(x = reorder(Industry, rev.employee), y = rev.employee * 1000)) + 
+  geom_boxplot() +
+  coord_flip() +
+  theme_bw(base_size = 8) +
+  xlab("Industry") + 
+  ylab("Range of Revenue per Employee (in $000, excluding outliers)") 
+```
+
+
