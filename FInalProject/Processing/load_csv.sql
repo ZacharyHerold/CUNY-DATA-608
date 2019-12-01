@@ -1,1 +1,0 @@
-LOAD 'C:\\Users\\zhero\\Desktop\\CUNY\\DATA608\\final\\write_csv\\900901.csv'
